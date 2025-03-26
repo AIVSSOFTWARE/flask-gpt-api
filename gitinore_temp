@@ -1,0 +1,5 @@
+*.zip
+*.pdf
+*.docx
+__pycache__/
+usage_log.json
