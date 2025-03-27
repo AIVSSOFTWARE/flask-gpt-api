@@ -1,4 +1,4 @@
-# ✅ Flask app with RAG using FAISS + sentence-transformers + multi-part docs (split into 4 parts)
+# ✅ Flask app with RAG using FAISS + sentence-transformers + 4-part docs
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sendgrid import SendGridAPIClient
@@ -27,7 +27,7 @@ USAGE_FILE = "usage_log.json"
 model = SentenceTransformer("all-MiniLM-L6-v2")
 index = faiss.read_index("index.faiss")
 docs = []
-for i in range(1, 5):  # Adjusted to 4 parts
+for i in range(1, 5):  # Now loads 4 parts
     part_file = f"docs_part{i}.pkl"
     if os.path.exists(part_file):
         with open(part_file, "rb") as f:
