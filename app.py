@@ -1,4 +1,4 @@
-# ✅ Flask app with RAG using FAISS + sentence-transformers
+# ✅ Flask app with RAG using FAISS + sentence-transformers + multi-part docs
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sendgrid import SendGridAPIClient
@@ -23,11 +23,17 @@ SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
 USAGE_FILE = "usage_log.json"
 
-# ✅ Load RAG components
+# ✅ Load RAG components from split docs
 model = SentenceTransformer("all-MiniLM-L6-v2")
 index = faiss.read_index("index.faiss")
-with open("docs.pkl", "rb") as f:
-    docs = pickle.load(f)
+docs = []
+for i in range(1, 4):  # Adjust if you have more parts
+    part_file = f"docs_part{i}.pkl"
+    if os.path.exists(part_file):
+        with open(part_file, "rb") as f:
+            part = pickle.load(f)
+            docs.extend(part)
+print(f"✅ Loaded {len(docs)} total chunks")
 
 # ---------------------------
 # Usage Tracking
@@ -146,4 +152,5 @@ Question:
 # Run Locally
 # ---------------------------
 if __name__ == "__main__":
-    app.run(debug=True, port=5050)
+    port = int(os.environ.get("PORT", 5050))
+    app.run(debug=True, host="0.0.0.0", port=port)
