@@ -1,3 +1,4 @@
+# ✅ Flask app with RAG using FAISS + sentence-transformers
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sendgrid import SendGridAPIClient
@@ -9,6 +10,10 @@ import base64
 import zipfile
 from fpdf import FPDF
 from docx import Document
+import faiss
+import pickle
+import numpy as np
+from sentence_transformers import SentenceTransformer
 
 app = Flask(__name__)
 CORS(app)
@@ -17,6 +22,12 @@ client = OpenAI()
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
 USAGE_FILE = "usage_log.json"
+
+# ✅ Load RAG components
+model = SentenceTransformer("all-MiniLM-L6-v2")
+index = faiss.read_index("index.faiss")
+with open("docs.pkl", "rb") as f:
+    docs = pickle.load(f)
 
 # ---------------------------
 # Usage Tracking
@@ -56,17 +67,33 @@ def handle_query():
     if not can_use(email):
         return jsonify({"status": "error", "message": "limit_reached"}), 403
 
+    # ✅ RAG: Embed query and search FAISS index
+    query_vector = model.encode([query])[0].astype("float32").reshape(1, -1)
+    D, I = index.search(query_vector, k=5)
+    context_chunks = [docs[i]['text'] for i in I[0] if i < len(docs)]
+    context = "\n\n".join(context_chunks)
+
+    prompt = f"""
+You are an assistant. Use the context below to answer the question.
+
+Context:
+{context}
+
+Question:
+{query}
+"""
+
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": query}]
+            messages=[{"role": "user", "content": prompt}]
         )
         answer = response.choices[0].message.content
     except Exception as e:
         return jsonify({"status": "error", "message": f"OpenAI error: {str(e)}"}), 500
 
     disclaimer = "DISCLAIMER: This response is AI-generated and may contain inaccuracies."
-    full_text = f"Query: {query}\n\nResponse:\n{answer}\n\n{disclaimer}"
+    full_text = f"Query: {query}\n\nContext:\n{context}\n\nResponse:\n{answer}\n\n{disclaimer}"
 
     # Generate PDF
     pdf = FPDF()
