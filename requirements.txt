@@ -5,3 +5,8 @@ sendgrid
 fpdf
 python-docx
 gunicorn
+faiss-cpu
+sentence-transformers
+PyMuPDF
+fpdf
+python-docx
