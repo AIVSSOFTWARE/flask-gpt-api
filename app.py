@@ -10,6 +10,7 @@ import base64
 import zipfile
 from fpdf import FPDF
 from docx import Document
+from datetime import datetime
 import faiss
 import pickle
 import numpy as np
@@ -130,7 +131,14 @@ Question:
         "and does not constitute legal or professional advice. Please consult a qualified expert before acting on any recommendation. AIVS SOFTWARE LIMITED COPYRIGHT 2025 ALL RIGHTS RESERVED"
     )
 
-    full_text = f"Query: {query}\n\nContext:\n{context}\n\nResponse:\n{answer}\n\n{disclaimer}"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    full_text = f"""Query: {query}
+
+Response (generated {timestamp}):
+
+{answer}
+
+{disclaimer}"""
 
     try:
         pdf = FPDF()
@@ -147,11 +155,15 @@ Question:
 
         context_text = f"""Query: {query}
 
-        Context Chunks Used:
+Context Chunks Used (generated {timestamp}):
 
-        {context}
-        """
+{context}
 
+{disclaimer}"""
+
+Context Chunks Used:
+
+{context}"
         context_pdf = FPDF()
         context_pdf.add_page()
         context_pdf.set_font("Arial", size=12)
