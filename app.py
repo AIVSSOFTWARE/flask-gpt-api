@@ -73,6 +73,8 @@ def handle_query():
     if not can_use(email):
         return jsonify({"status": "error", "message": "limit_reached"}), 403
 
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     query_vector = model.encode([query])[0].astype("float32").reshape(1, -1)
     D, I = index.search(query_vector, k=10)
     raw_chunks = [docs[i]['text'] for i in I[0] if i < len(docs)]
@@ -94,7 +96,8 @@ Your response must include:
 - Any documentation or reporting duties
 - Immediate steps to ensure safety
 
-Tailor the tone to a {job_title} working in the {discipline} sector, and keep the response UK-compliant and legally aware.
+Tailor the tone to a {job_title} working in the {discipline} sector, focusing on {search_type}.
+Your response should be practical, clear, and legally compliant.
 """
     elif job_title.lower() in ["site supervisor", "foreman"]:
         tone = f"""
@@ -131,14 +134,14 @@ Question:
         "and does not constitute legal or professional advice. Please consult a qualified expert before acting on any recommendation. AIVS SOFTWARE LIMITED COPYRIGHT 2025 ALL RIGHTS RESERVED"
     )
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     full_text = f"""Query: {query}
 
 Response (generated {timestamp}):
 
 {answer}
 
-{disclaimer}"""
+{disclaimer}
+"""
 
     try:
         pdf = FPDF()
@@ -162,9 +165,6 @@ Context Chunks Used (generated {timestamp}):
 {disclaimer}
 """
 
-Context Chunks Used:
-
-{context}"
         context_pdf = FPDF()
         context_pdf.add_page()
         context_pdf.set_font("Arial", size=12)
