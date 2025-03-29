@@ -159,7 +159,8 @@ Context Chunks Used (generated {timestamp}):
 
 {context}
 
-{disclaimer}"""
+{disclaimer}
+"""
 
 Context Chunks Used:
 
