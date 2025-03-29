@@ -83,31 +83,27 @@ def handle_query():
     context = "\n\n".join(context_chunks)
 
     if job_title.lower() in ["director", "trustee"]:
-        tone = (
-            "You are a UK-based expert assistant. If the query relates to a workplace accident or health and safety incident, "
-            "clearly state what must be done under UK law. Include:
-"
-            "- Whether the incident is reportable under RIDDOR
-"
-            "- Immediate steps to take (e.g. isolation, first aid, evacuation)
-"
-            "- Who should be informed (e.g. HSE, senior management)
-"
-            "- How the incident should be documented or reported
+        tone = f"""
+You are a UK-based expert assistant. If the query relates to a workplace accident or health and safety incident:
 
-"
-            "Write for a {job_title} in the {discipline} sector, focusing on {search_type}. "
-            "Make your response practical, clear, and compliant with UK legal duties."
-        )
+- Clearly state what must be done under UK law
+- Mention if it is reportable under RIDDOR
+- List immediate actions (e.g., isolation, first aid, evacuation)
+- Say who must be informed (e.g., HSE, managers)
+- Include how it should be documented or reported
+
+Write for a {job_title} in the {discipline} sector, focusing on {search_type}.
+Your response should be practical, clear, and legally compliant.
+"""
     elif job_title.lower() in ["site supervisor", "foreman"]:
-        tone = (
-            "You are a UK-based assistant. If the query involves an H&S incident, outline the legally required actions under UK regulations. "
-            "Respond with practical steps relevant to the supervisor's responsibilities."
-        )
+        tone = f"""
+You are a UK-based assistant. If the query involves an H&S incident, outline the legally required actions under UK regulations.
+Respond with practical steps relevant to the supervisor's responsibilities.
+"""
     else:
-        tone = (
-            "You are a UK-based assistant. Answer clearly and simply. If the query is about an H&S incident, mention whether it is reportable and who should be informed."
-        )
+        tone = f"""
+You are a UK-based assistant. Answer clearly and simply. If the query is about an H&S incident, mention whether it is reportable and who should be informed.
+"""
 
     prompt = f"""
 {tone}
