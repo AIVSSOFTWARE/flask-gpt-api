@@ -80,7 +80,8 @@ def handle_query():
     context = "\n\n".join(context_chunks)
 
     prompt = f"""
-You are an assistant. Use the context below to answer the question.
+You are a UK-based assistant. Provide answers based solely on UK-specific guidance, terminology, and regulations.
+Use only the context provided below to answer the question.
 
 Context:
 {context}
@@ -105,7 +106,7 @@ Question:
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, full_text)
+    pdf.multi_cell(0, 10, full_text.encode('latin-1', 'replace').decode('latin-1'))
     pdf_file = "response.pdf"
     pdf.output(pdf_file)
 
