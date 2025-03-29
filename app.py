@@ -78,22 +78,22 @@ def handle_query():
 
     context_chunks = [
         chunk for chunk in raw_chunks
-        if len(chunk.strip()) > 300 and "glossary" not in chunk.lower() and "index" not in chunk.lower()
+        if len(chunk.strip().split()) > 50 and "glossary" not in chunk.lower() and "index" not in chunk.lower()
     ][:1]
     context = "\n\n".join(context_chunks)
 
     if job_title.lower() in ["director", "trustee"]:
         tone = f"""
-You are a UK-based expert assistant. If the query relates to a workplace accident or health and safety incident:
+You are a UK-based expert assistant. The following question may relate to a workplace accident or health and safety incident.
 
-- Clearly state what must be done under UK law
-- Mention if it is reportable under RIDDOR
-- List immediate actions (e.g., isolation, first aid, evacuation)
-- Say who must be informed (e.g., HSE, managers)
-- Include how it should be documented or reported
+Your response must include:
+- Whether the event is reportable under RIDDOR (UK law)
+- Who should be informed (e.g., HSE, supervisors)
+- Required follow-up actions or investigation
+- Any documentation or reporting duties
+- Immediate steps to ensure safety
 
-Write for a {job_title} in the {discipline} sector, focusing on {search_type}.
-Your response should be practical, clear, and legally compliant.
+Tailor the tone to a {job_title} working in the {discipline} sector, and keep the response UK-compliant and legally aware.
 """
     elif job_title.lower() in ["site supervisor", "foreman"]:
         tone = f"""
@@ -145,10 +145,23 @@ Question:
         docx_file = "response.docx"
         doc.save(docx_file)
 
+        context_text = f"Query: {query}
+
+Context Chunks Used:
+
+{context}"
+        context_pdf = FPDF()
+        context_pdf.add_page()
+        context_pdf.set_font("Arial", size=12)
+        context_pdf.multi_cell(0, 10, context_text.encode('latin-1', 'replace').decode('latin-1'))
+        context_file = "context.pdf"
+        context_pdf.output(context_file)
+
         zip_file = "response.zip"
         with zipfile.ZipFile(zip_file, 'w') as zipf:
             zipf.write(pdf_file)
             zipf.write(docx_file)
+            zipf.write(context_file)
 
         with open(zip_file, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
