@@ -147,14 +147,11 @@ Question:
 
         context_text = f"""Query: {query}
 
-Context Chunks Used:
+        Context Chunks Used:
 
-{context}
-"""
+        {context}
+        """
 
-Context Chunks Used:
-
-{context}"
         context_pdf = FPDF()
         context_pdf.add_page()
         context_pdf.set_font("Arial", size=12)
