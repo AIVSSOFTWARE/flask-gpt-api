@@ -77,8 +77,15 @@ def handle_query():
         return jsonify({"status": "error", "message": "limit_reached"}), 403
 
     query_vector = model.encode([query])[0].astype("float32").reshape(1, -1)
-    D, I = index.search(query_vector, k=5)
-    context_chunks = [docs[i]['text'] for i in I[0] if i < len(docs)]
+    # --------------------------- Change
+    D, I = index.search(query_vector, k=10)
+    raw_chunks = [docs[i]['text'] for i in I[0] if i < len(docs)]
+    # Filter down to the most useful chunks
+    context_chunks = [
+    chunk for chunk in raw_chunks
+    if len(chunk.strip()) > 200 and "glossary" not in chunk.lower() and "index" not in chunk.lower()
+    ][:3] # Take only the top 3 filtered chunks
+    # --------------------------- End Change
     clean_chunks = [chunk for chunk in context_chunks if len(chunk.strip()) > 100 and not chunk.strip().startswith("fire_")]
     context = "\n\n".join(clean_chunks)
 
