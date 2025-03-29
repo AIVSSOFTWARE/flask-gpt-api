@@ -77,28 +77,33 @@ def handle_query():
         return jsonify({"status": "error", "message": "limit_reached"}), 403
 
     query_vector = model.encode([query])[0].astype("float32").reshape(1, -1)
+
+ # --------------------------- Change
+
     D, I = index.search(query_vector, k=10)
-    raw_chunks = [docs[i]['text'] for i in I[0] if i < len(docs)]
-    context_chunks = [
-        chunk for chunk in raw_chunks
-        if len(chunk.strip()) > 300 and "glossary" not in chunk.lower() and "index" not in chunk.lower()
-    ][:1]
-    context = "
+raw_chunks = [docs[i]['text'] for i in I[0] if i < len(docs)]
 
-".join(context_chunks)
+context_chunks = [
+    chunk for chunk in raw_chunks
+    if len(chunk.strip()) > 300 and "glossary" not in chunk.lower() and "index" not in chunk.lower()
+][:1]
+context = "\n\n".join(context_chunks)
 
-    if job_title.lower() in ["director", "trustee"]:
-        tone = "Provide a high-level UK-specific summary suitable for senior decision-makers."
-    elif job_title.lower() in ["site supervisor", "foreman"]:
-        tone = "Provide a practical UK-specific explanation with steps for field-level management."
-    else:
-        tone = "Provide a clear and simple UK-specific answer suitable for general staff."
+if job_title.lower() in ["director", "trustee"]:
+    tone = (
+        "You are a UK-based expert assistant. Provide a high-level, structured summary appropriate for executive-level decisions."
+    )
+elif job_title.lower() in ["site supervisor", "foreman"]:
+    tone = (
+        "You are a UK-based assistant. Give a practical, step-by-step response suitable for on-site managers."
+    )
+else:
+    tone = (
+        "You are a UK-based assistant. Write a clear, simple explanation for general staff in the construction or safety sector."
+    )
 
-    prompt = f"""
-You are a UK-based expert assistant. Based on the context below, write a thorough, well-structured answer to the user's question.
-
-The answer must be detailed, practical, and tailored to the user's role: {job_title}.
-Include multiple paragraphs, and ensure clarity for someone in the {discipline} sector, focusing on {search_type}.
+prompt = f"""
+{tone}
 
 Context:
 {context}
@@ -106,7 +111,7 @@ Context:
 Question:
 {query}
 """
-
+# --------------------------- End Change
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
