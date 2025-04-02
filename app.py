@@ -1,169 +1,147 @@
-# Clean start of app.py with fixed indentation
+
+import os
+import faiss
+import pickle
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail, Attachment, FileContent, FileName, FileType, Disposition
-from openai import OpenAI
-import os
-import json
-import base64
-import zipfile
 from fpdf import FPDF
 from docx import Document
-from datetime import datetime
-import faiss
-import pickle
-import numpy as np
 from sentence_transformers import SentenceTransformer
+import base64
+import zipfile
+from datetime import datetime
+import openai
 
 app = Flask(__name__)
 CORS(app)
 
-client = OpenAI()
+# Load model once
+embed_model = SentenceTransformer("all-MiniLM-L6-v2")
+openai.api_key = os.getenv("OPENAI_API_KEY")
 SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
 FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL")
-USAGE_FILE = "usage_log.json"
-
-# Load FAISS index and docs
-model = SentenceTransformer("all-MiniLM-L6-v2")
-index = faiss.read_index("index.faiss")
-docs = []
-for i in range(1, 5):
-    with open(f"docs_part{i}.pkl", "rb") as f:
-        docs.extend(pickle.load(f))
-print(f"✅ Loaded {len(docs)} chunks")
-
-# Usage Tracking
-def load_usage():
-    if not os.path.exists(USAGE_FILE):
-        return {}
-    with open(USAGE_FILE, 'r') as f:
-        return json.load(f)
-
-def save_usage(data):
-    with open(USAGE_FILE, 'w') as f:
-        json.dump(data, f, indent=2)
-
-def can_use(email):
-    usage = load_usage()
-    return usage.get(email, 0) < 5
-
-def record_use(email):
-    usage = load_usage()
-    usage[email] = usage.get(email, 0) + 1
-    save_usage(usage)
 
 @app.route("/query", methods=["POST"])
 def handle_query():
     data = request.get_json()
+
     name = data.get("full_name")
     email = data.get("email")
     query = data.get("query")
-    job_title = data.get("job_title", "")
-    discipline = data.get("discipline", "")
-    search_type = data.get("search_type", "General")
+    job_title = data.get("job_title")
+    discipline = data.get("discipline", "").lower().replace(" ", "_")
+    search_type = data.get("search_type")
+    site = data.get("site")
+    supervisor_required = data.get("supervisor_required")
+    supervisor_email = data.get("supervisor_email")
+    supervisor_name = data.get("supervisor_name")
+    funnel_1 = data.get("funnel_1")
+    funnel_2 = data.get("funnel_2")
+    funnel_3 = data.get("funnel_3")
+    dropdown_bonus = data.get("dropdown_bonus")
 
-    if not name or not email or not query:
-        return jsonify({"status": "error", "message": "Missing fields"}), 400
+    # Determine authority level
+    job_rank_map = {
+        "Managing Director": 10,
+        "CEO": 10,
+        "Board Member": 9,
+        "Strategy Consultant": 8,
+        "Senior Advisor": 8,
+        "Operations Lead": 6,
+        "Project Manager": 5,
+        "HR Executive": 5,
+        "Analyst": 3,
+        "Coordinator": 3,
+        "Intern": 1
+    }
+    rank = job_rank_map.get(job_title, 5)
 
-    if not can_use(email):
-        return jsonify({"status": "error", "message": "limit_reached"}), 403
+    # Load index and docs
+    try:
+        index = faiss.read_index(f"indexes/{discipline}_index.faiss")
+        with open(f"indexes/{discipline}_docs.pkl", "rb") as f:
+            docs = pickle.load(f)
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"FAISS load error: {str(e)}"}), 500
 
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Embed query and search
+    query_vector = embed_model.encode([query])
+    D, I = index.search(query_vector, k=10)
 
-    # GPT Prompt (no FAISS context)
-    if job_title.lower() in ["director", "trustee"]:
-        tone = f"""
-You are a UK-based expert assistant. The following question may relate to a workplace accident or health and safety incident.
+    # Collect top chunks
+    context_chunks = [
+        docs[i]['text'] for i in I[0]
+        if i < len(docs) and len(docs[i]['text'].strip()) > 200
+    ][:3]
+    context = "\n\n".join(context_chunks)
 
-Your response must be comprehensive and include:
-- Emergency actions (first aid, isolating the area, alerting authorities)
-- Legal duties under UK law, including RIDDOR reporting
-- Notification requirements (HSE, employer, local authority)
-- Follow-up and internal investigation steps
-- Preventive measures for future incidents
+    # Compose GPT prompt
+    prompt = f"""You are an expert advisor responding to a strategic management query.
 
-Structure your response using clear headings and bullet points.
-Use a professional but readable tone appropriate for a {job_title} in the {discipline} sector.
+Tone: Professional and UK-specific.
+Discipline: {discipline.title()}
+Job Title: {job_title} (Level {rank})
+Search Type: {search_type}
+Urgency: {dropdown_bonus}
+Site: {site}
 
-End with: 'Would you like assistance drafting a RIDDOR submission or incident report template?'
-"""
-    elif job_title.lower() in ["site supervisor", "foreman"]:
-        tone = f"""
-You are a UK-based assistant. If the query involves an H&S incident, outline the legally required actions under UK regulations.
-Respond with practical steps relevant to the supervisor's responsibilities.
-"""
-    else:
-        tone = f"""
-You are a UK-based assistant. Answer clearly and simply. If the query is about an H&S incident, mention whether it is reportable and who should be informed.
-"""
-
-    prompt = f"""
-{tone}
+Context:
+{context}
 
 Question:
 {query}
 """
 
+    # Get GPT response
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
-        answer = response.choices[0].message.content
+        answer = response['choices'][0]['message']['content']
     except Exception as e:
         return jsonify({"status": "error", "message": f"OpenAI error: {str(e)}"}), 500
 
-    disclaimer = (
-        "DISCLAIMER: This response was generated by AI based on available UK-specific documentation. "
-        "While care has been taken to ensure relevance, the information provided is for general guidance only "
-        "and does not constitute legal or professional advice. Please consult a qualified expert before acting on any recommendation."
-    )
+    # Format full text for docs
+    disclaimer = "DISCLAIMER: This AI-generated response may include inaccuracies. Review before acting. AIVS Software Limited (c) 2025"
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    full_text = f"""Query: {query}
+    full_text = f"Query by: {name} ({email})\nDate: {timestamp}\n\n{query}\n\n---\n\nResponse:\n{answer}\n\n---\n\n{disclaimer}"
 
-Response (generated {timestamp}):
+    # Create PDF
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, full_text.encode('latin-1', 'replace').decode('latin-1'))
+    pdf_file = "response.pdf"
+    pdf.output(pdf_file)
 
-{answer}
+    # Create DOCX
+    doc = Document()
+    doc.add_paragraph(full_text)
+    docx_file = "response.docx"
+    doc.save(docx_file)
 
-{disclaimer}
-"""
+    # Context PDF
+    context_text = f"Query: {query}\n\nContext Chunks Used:\n\n{context}\nDate: {timestamp}\n\n{disclaimer}"
+    context_pdf = FPDF()
+    context_pdf.add_page()
+    context_pdf.set_font("Arial", size=12)
+    context_pdf.multi_cell(0, 10, context_text.encode('latin-1', 'replace').decode('latin-1'))
+    context_file = "context.pdf"
+    context_pdf.output(context_file)
 
+    # Zip all files
+    zip_file = "response.zip"
+    with zipfile.ZipFile(zip_file, 'w') as zipf:
+        zipf.write(pdf_file)
+        zipf.write(docx_file)
+        zipf.write(context_file)
+
+    # Email to recipient
     try:
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.multi_cell(0, 10, full_text.encode('latin-1', 'replace').decode('latin-1'))
-        pdf_file = "response.pdf"
-        pdf.output(pdf_file)
-
-        doc = Document()
-        doc.add_paragraph(full_text)
-        docx_file = "response.docx"
-        doc.save(docx_file)
-
-        context_text = f"""Query: {query}
-
-Context Chunks Used (generated {timestamp}):
-
-[Context Removed for This Version]
-
-{disclaimer}
-"""
-
-        context_pdf = FPDF()
-        context_pdf.add_page()
-        context_pdf.set_font("Arial", size=12)
-        context_pdf.multi_cell(0, 10, context_text.encode('latin-1', 'replace').decode('latin-1'))
-        context_file = "context.pdf"
-        context_pdf.output(context_file)
-
-        zip_file = "response.zip"
-        with zipfile.ZipFile(zip_file, 'w') as zipf:
-            zipf.write(pdf_file)
-            zipf.write(docx_file)
-            zipf.write(context_file)
-
         with open(zip_file, "rb") as f:
             encoded = base64.b64encode(f.read()).decode()
 
@@ -177,20 +155,15 @@ Context Chunks Used (generated {timestamp}):
         message = Mail(
             from_email=FROM_EMAIL,
             to_emails=email,
-            subject="Your AI Response",
-            plain_text_content="Attached is your AI-generated response."
+            subject="Your Strategic Management AI Response",
+            plain_text_content="Please find your response attached."
         )
         message.attachment = attachment
 
         sg = SendGridAPIClient(SENDGRID_API_KEY)
         sg.send(message)
-
     except Exception as e:
         return jsonify({"status": "error", "message": f"Email error: {str(e)}"}), 500
 
-    record_use(email)
     return jsonify({"status": "success", "message": "Response emailed successfully."})
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5050))
-    app.run(debug=True, host="0.0.0.0", port=port)
